@@ -2,13 +2,14 @@
 from playwright.sync_api import sync_playwright
 from lxml import html
 import time
+import pandas as pd
 
 user_dir = '/tmp/playwright'
 
 
 def search_repos(query):
   with sync_playwright() as p:
-    browser = p.chromium.launch_persistent_context(user_dir, headless=False, slow_mo=1000)
+    browser = p.chromium.launch_persistent_context(user_dir, headless=False, slow_mo=1)
     page = browser.new_page()
     page.goto("https://pt.khanacademy.org/", wait_until='domcontentloaded')
 
@@ -24,6 +25,9 @@ def search_repos(query):
     tree = page.content()
     tree = html.fromstring(page.content())
 
+    #-------------------
+    #--------scratch.mit
+
     page.goto("https://scratch.mit.edu/", wait_until='domcontentloaded')
       # Click [placeholder="Pesquisa"]
     page.click("[placeholder=\"Pesquisa\"]")
@@ -33,20 +37,46 @@ def search_repos(query):
     page.press("[placeholder=\"Pesquisa\"]", "Enter")
     
     time.sleep(5)
-    tree2 = page.content()
-    tree2 = html.fromstring(page.content())
+    tree = page.content()
+    tree = html.fromstring(page.content())
 
 
-  resultados = tree.xpath('//div[@class= "gs-title"]//@href')
-  resultados2 = tree2.xpath('//div[@class = "thumbnail-title"]//@href')
+    links_khan = tree.xpath('//div[@class= "gs-title"]//@href')
+    links_scratch = tree.xpath('//div[@class = "thumbnail-title"]//@href')
 
-  resultados2 = ['https://scratch.mit.edu' + x for x in resultados2]
+    links_scratch = ['https://scratch.mit.edu' + x for x in links_scratch if '/users' not in x]
 
-  dicionario = {'khan academy': resultados, 'scratch': resultados2}
+    dicionario = {'khan academy': links_khan, 'scratch': links_scratch}
+    
+    scratch = {}
+    
+    
+    for item in links_scratch:
+      page.goto(item, wait_until='domcontentloaded')
+      time.sleep(5)
+      tree = page.content()
+      tree = html.fromstring(page.content())
+      
+      item_dict = {}
+      
+      item_dict['publisher'] = 'https://scratch.mit.edu/'
+      item_dict['creator'] =  tree.xpath("//div[@class = 'title']//a/text()")
+      item_dict['title'] = tree.xpath("//div[@class = 'title']//div/text()")
+      item_dict['description'] =  tree.xpath( "//div[@class = 'project-description']/text()")
+      item_dict['date'] = tree.xpath("//div[@class = 'share-date']//span/text()")
+      item_dict['identifier'] = item
 
-  print(dicionario['khan academy'])
-  print(dicionario['scratch'])
+      scratch[item] = item_dict
+
+  return scratch
+
+
+dicionario = search_repos("algebra")
+
+df = pd.DataFrame.from_dict(dicionario)
+
+df.to_csv(index=False)
 
 
 
-search_repos("algebra")
+
